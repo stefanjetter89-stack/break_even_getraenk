@@ -1,0 +1,149 @@
+import { supabase } from "@/lib/supabase";
+import type { Beverage, ConsumptionWithDetails, Member, Team } from "@/lib/types";
+
+function generateJoinCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+export async function createTeam(params: {
+  teamName: string;
+  defaultPackagePrice: number;
+  memberName: string;
+}): Promise<{ team: Team; member: Member }> {
+  let joinCode = generateJoinCode();
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const { data: existing } = await supabase
+      .from("teams")
+      .select("id")
+      .eq("join_code", joinCode)
+      .maybeSingle();
+    if (!existing) break;
+    joinCode = generateJoinCode();
+  }
+
+  const { data: team, error: teamError } = await supabase
+    .from("teams")
+    .insert({
+      name: params.teamName,
+      join_code: joinCode,
+      default_package_price: params.defaultPackagePrice,
+    })
+    .select()
+    .single();
+
+  if (teamError || !team) throw teamError ?? new Error("Team konnte nicht erstellt werden.");
+
+  const { data: member, error: memberError } = await supabase
+    .from("members")
+    .insert({
+      team_id: team.id,
+      name: params.memberName,
+      package_price: params.defaultPackagePrice,
+    })
+    .select()
+    .single();
+
+  if (memberError || !member) throw memberError ?? new Error("Mitglied konnte nicht erstellt werden.");
+
+  return { team, member };
+}
+
+export async function joinTeam(params: {
+  joinCode: string;
+  memberName: string;
+  packagePrice: number;
+}): Promise<{ team: Team; member: Member }> {
+  const { data: team, error: teamError } = await supabase
+    .from("teams")
+    .select()
+    .eq("join_code", params.joinCode.toUpperCase().trim())
+    .maybeSingle();
+
+  if (teamError) throw teamError;
+  if (!team) throw new Error("Kein Team mit diesem Code gefunden.");
+
+  const { data: member, error: memberError } = await supabase
+    .from("members")
+    .insert({
+      team_id: team.id,
+      name: params.memberName,
+      package_price: params.packagePrice,
+    })
+    .select()
+    .single();
+
+  if (memberError || !member) throw memberError ?? new Error("Mitglied konnte nicht erstellt werden.");
+
+  return { team, member };
+}
+
+export async function getTeam(teamId: string): Promise<Team> {
+  const { data, error } = await supabase.from("teams").select().eq("id", teamId).single();
+  if (error || !data) throw error ?? new Error("Team nicht gefunden.");
+  return data;
+}
+
+export async function getMembers(teamId: string): Promise<Member[]> {
+  const { data, error } = await supabase
+    .from("members")
+    .select()
+    .eq("team_id", teamId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getBeverages(): Promise<Beverage[]> {
+  const { data, error } = await supabase
+    .from("beverages")
+    .select()
+    .order("category", { ascending: true })
+    .order("name", { ascending: true });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getConsumptions(memberIds: string[]): Promise<ConsumptionWithDetails[]> {
+  if (memberIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from("consumptions")
+    .select(
+      "id, member_id, beverage_id, quantity, timestamp, member:members(id, name), beverage:beverages(id, name, price, category)"
+    )
+    .in("member_id", memberIds)
+    .order("timestamp", { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as ConsumptionWithDetails[];
+}
+
+export async function addConsumption(params: {
+  memberId: string;
+  beverageId: string;
+  quantity: number;
+}) {
+  const { error } = await supabase.from("consumptions").insert({
+    member_id: params.memberId,
+    beverage_id: params.beverageId,
+    quantity: params.quantity,
+  });
+  if (error) throw error;
+}
+
+export async function deleteConsumption(id: string) {
+  const { error } = await supabase.from("consumptions").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function updateMemberPackagePrice(memberId: string, packagePrice: number) {
+  const { error } = await supabase
+    .from("members")
+    .update({ package_price: packagePrice })
+    .eq("id", memberId);
+  if (error) throw error;
+}
