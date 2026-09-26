@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GlassWater, LayoutDashboard } from "lucide-react";
+import { GlassWater, LayoutDashboard, ListPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
   { href: "/erfassen", label: "Erfassen", icon: GlassWater },
+  { href: "/getraenke", label: "Getränke", icon: ListPlus },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
 

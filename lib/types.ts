@@ -16,6 +16,7 @@ export interface Member {
 
 export interface Beverage {
   id: string;
+  team_id: string | null;
   name: string;
   category: string;
   price: number;

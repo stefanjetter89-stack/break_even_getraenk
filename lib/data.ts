@@ -51,6 +51,19 @@ export async function createTeam(params: {
 
   if (memberError || !member) throw memberError ?? new Error("Mitglied konnte nicht erstellt werden.");
 
+  const { data: defaults, error: defaultsError } = await supabase
+    .from("beverages")
+    .select("name, category, price")
+    .is("team_id", null);
+  if (defaultsError) throw defaultsError;
+
+  if (defaults && defaults.length > 0) {
+    const { error: seedError } = await supabase
+      .from("beverages")
+      .insert(defaults.map((b) => ({ ...b, team_id: team.id })));
+    if (seedError) throw seedError;
+  }
+
   return { team, member };
 }
 
@@ -128,14 +141,54 @@ export async function getMembers(teamId: string): Promise<Member[]> {
   return data ?? [];
 }
 
-export async function getBeverages(): Promise<Beverage[]> {
+export async function getBeverages(teamId: string): Promise<Beverage[]> {
   const { data, error } = await supabase
     .from("beverages")
     .select()
+    .eq("team_id", teamId)
     .order("category", { ascending: true })
     .order("name", { ascending: true });
   if (error) throw error;
   return data ?? [];
+}
+
+export async function addBeverage(params: {
+  teamId: string;
+  name: string;
+  category: string;
+  price: number;
+}): Promise<Beverage> {
+  const { data, error } = await supabase
+    .from("beverages")
+    .insert({
+      team_id: params.teamId,
+      name: params.name,
+      category: params.category,
+      price: params.price,
+    })
+    .select()
+    .single();
+  if (error || !data) throw error ?? new Error("Getränk konnte nicht angelegt werden.");
+  return data;
+}
+
+export async function updateBeverage(
+  id: string,
+  params: { name: string; category: string; price: number }
+): Promise<Beverage> {
+  const { data, error } = await supabase
+    .from("beverages")
+    .update(params)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error || !data) throw error ?? new Error("Getränk konnte nicht aktualisiert werden.");
+  return data;
+}
+
+export async function deleteBeverage(id: string) {
+  const { error } = await supabase.from("beverages").delete().eq("id", id);
+  if (error) throw error;
 }
 
 export async function getConsumptions(memberIds: string[]): Promise<ConsumptionWithDetails[]> {

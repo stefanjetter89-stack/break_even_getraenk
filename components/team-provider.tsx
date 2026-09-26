@@ -43,7 +43,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
       const [teamData, membersData, beveragesData] = await Promise.all([
         getTeam(session.teamId),
         getMembers(session.teamId),
-        getBeverages(),
+        getBeverages(session.teamId),
       ]);
       const consumptionsData = await getConsumptions(membersData.map((m) => m.id));
       setTeam(teamData);
