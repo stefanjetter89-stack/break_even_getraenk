@@ -68,17 +68,46 @@ export async function joinTeam(params: {
   if (teamError) throw teamError;
   if (!team) throw new Error("Kein Team mit diesem Code gefunden.");
 
+  const name = params.memberName.trim();
+
+  const { data: teamMembers, error: membersError } = await supabase
+    .from("members")
+    .select()
+    .eq("team_id", team.id);
+  if (membersError) throw membersError;
+
+  const existing = (teamMembers ?? []).find(
+    (m) => m.name.toLowerCase() === name.toLowerCase()
+  );
+  if (existing) {
+    // Gleicher Name im Team = dieselbe Person auf einem weiteren Gerät.
+    return { team, member: existing };
+  }
+
   const { data: member, error: memberError } = await supabase
     .from("members")
     .insert({
       team_id: team.id,
-      name: params.memberName,
+      name,
       package_price: params.packagePrice,
     })
     .select()
     .single();
 
-  if (memberError || !member) throw memberError ?? new Error("Mitglied konnte nicht erstellt werden.");
+  if (memberError || !member) {
+    // 23505 = unique_violation (Race Condition: paralleler Join mit gleichem Namen)
+    if ((memberError as { code?: string } | null)?.code === "23505") {
+      const { data: raceMember, error: raceError } = await supabase
+        .from("members")
+        .select()
+        .eq("team_id", team.id)
+        .ilike("name", name)
+        .single();
+      if (raceError || !raceMember) throw raceError ?? new Error("Mitglied konnte nicht geladen werden.");
+      return { team, member: raceMember };
+    }
+    throw memberError ?? new Error("Mitglied konnte nicht erstellt werden.");
+  }
 
   return { team, member };
 }

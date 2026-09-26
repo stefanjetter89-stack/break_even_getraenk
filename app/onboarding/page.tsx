@@ -183,7 +183,10 @@ function JoinTeamForm() {
     <Card className="mt-4">
       <CardHeader>
         <CardTitle>Team beitreten</CardTitle>
-        <CardDescription>Gib den 6-stelligen Code eures Teams ein.</CardDescription>
+        <CardDescription>
+          Gib den 6-stelligen Code eures Teams ein. Nutzt du denselben Namen wie beim ersten
+          Gerät, wirst du automatisch mit deinem bestehenden Profil verbunden.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
