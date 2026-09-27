@@ -9,10 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { deleteConsumption } from "@/lib/data";
+import { isLocalId } from "@/lib/offline";
 import type { Member } from "@/lib/types";
 
 export default function DashboardPage() {
-  const { team, members, consumptions, currentMember, refresh } = useTeam();
+  const { team, members, consumptions, currentMember, refresh, removePendingConsumption } = useTeam();
   const [copied, setCopied] = React.useState(false);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
@@ -55,6 +56,10 @@ export default function DashboardPage() {
   }
 
   async function handleDelete(id: string) {
+    if (isLocalId(id)) {
+      removePendingConsumption(id);
+      return;
+    }
     setDeletingId(id);
     try {
       await deleteConsumption(id);
@@ -123,8 +128,13 @@ export default function DashboardPage() {
             <Card key={c.id}>
               <CardContent className="flex items-center justify-between p-3.5">
                 <div className="flex flex-col">
-                  <span className="text-sm font-medium">
+                  <span className="flex items-center gap-1.5 text-sm font-medium">
                     {c.quantity}× {c.beverage.name}
+                    {c.pending && (
+                      <Badge variant="outline" className="px-1.5 py-0 text-[10px] font-normal">
+                        wartet auf Sync
+                      </Badge>
+                    )}
                   </span>
                   <span className="text-xs text-muted-foreground">
                     {c.member.name} ·{" "}

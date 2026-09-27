@@ -34,6 +34,7 @@ export interface Consumption {
 export interface ConsumptionWithDetails extends Consumption {
   member: Pick<Member, "id" | "name">;
   beverage: Pick<Beverage, "id" | "name" | "price" | "category">;
+  pending?: boolean;
 }
 
 export interface MemberStats {

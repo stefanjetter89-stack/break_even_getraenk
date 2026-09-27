@@ -14,11 +14,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn, formatCurrency } from "@/lib/utils";
-import { addConsumption } from "@/lib/data";
 import type { Beverage } from "@/lib/types";
 
 export default function ErfassenPage() {
-  const { members, beverages, activeMemberId, setActiveMemberId, refresh } = useTeam();
+  const { members, beverages, activeMemberId, setActiveMemberId, bookConsumption } = useTeam();
   const [search, setSearch] = React.useState("");
   const [activeCategory, setActiveCategory] = React.useState<string>("Alle");
   const [selectedBeverage, setSelectedBeverage] = React.useState<Beverage | null>(null);
@@ -48,14 +47,13 @@ export default function ErfassenPage() {
 
   async function handleConfirm(quantity: number) {
     if (!selectedBeverage || !activeMember) return;
-    await addConsumption({
+    await bookConsumption({
       memberId: activeMember.id,
       beverageId: selectedBeverage.id,
       quantity,
     });
     setSelectedBeverage(null);
     showToast(`${quantity}× ${selectedBeverage.name} für ${activeMember.name} gebucht`);
-    refresh();
   }
 
   return (

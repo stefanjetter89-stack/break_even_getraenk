@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { SwRegister } from "@/components/sw-register";
 import "./globals.css";
+
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,6 +18,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "AIDA Break-Even",
   description: "Getränkepauschale erfassen und Break-Even im Team verfolgen.",
+  manifest: `${basePath}/manifest.webmanifest`,
+  icons: {
+    icon: `${basePath}/icon-192.png`,
+    apple: `${basePath}/icon-192.png`,
+  },
 };
 
 export const viewport = {
@@ -30,7 +38,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="de"
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-background text-foreground">{children}</body>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        <SwRegister />
+        {children}
+      </body>
     </html>
   );
 }
