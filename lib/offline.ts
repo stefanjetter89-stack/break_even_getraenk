@@ -9,6 +9,7 @@ interface CachedData {
 }
 
 export interface QueuedConsumption {
+  id?: string;
   localId: string;
   memberId: string;
   beverageId: string;

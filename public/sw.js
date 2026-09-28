@@ -1,4 +1,4 @@
-const CACHE_NAME = "aida-shell-v1";
+const CACHE_NAME = "aida-shell-v2";
 const SCOPE_URL = self.registration.scope;
 
 self.addEventListener("install", () => {
@@ -53,5 +53,20 @@ self.addEventListener("fetch", (event) => {
         .catch(() => cached);
       return cached || fetchPromise;
     })
+  );
+});
+
+// Die Seite meldet ihre bereits geladenen Assets, damit auch der allererste Besuch offline funktioniert.
+self.addEventListener("message", (event) => {
+  if (!event.data || event.data.type !== "CACHE_URLS") return;
+  const urls = Array.isArray(event.data.urls) ? event.data.urls : [];
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      Promise.all(
+        urls
+          .filter((u) => new URL(u, self.location.href).origin === self.location.origin)
+          .map((u) => cache.add(u).catch(() => undefined))
+      )
+    )
   );
 });

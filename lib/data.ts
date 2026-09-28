@@ -205,15 +205,24 @@ export async function getConsumptions(memberIds: string[]): Promise<ConsumptionW
 }
 
 export async function addConsumption(params: {
+  id?: string;
   memberId: string;
   beverageId: string;
   quantity: number;
+  signal?: AbortSignal;
 }) {
-  const { error } = await supabase.from("consumptions").insert({
-    member_id: params.memberId,
-    beverage_id: params.beverageId,
-    quantity: params.quantity,
-  });
+  // Client-seitige ID + ignoreDuplicates: ein erneuter Sync derselben Buchung ist idempotent.
+  let query = supabase.from("consumptions").upsert(
+    {
+      id: params.id ?? crypto.randomUUID(),
+      member_id: params.memberId,
+      beverage_id: params.beverageId,
+      quantity: params.quantity,
+    },
+    { onConflict: "id", ignoreDuplicates: true }
+  );
+  if (params.signal) query = query.abortSignal(params.signal);
+  const { error } = await query;
   if (error) throw error;
 }
 

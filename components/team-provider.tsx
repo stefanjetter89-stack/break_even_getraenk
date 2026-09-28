@@ -31,6 +31,25 @@ interface TeamContextValue {
   removePendingConsumption: (localId: string) => void;
 }
 
+const LOAD_TIMEOUT_MS = 8000;
+const BOOKING_TIMEOUT_MS = 6000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("timeout")), ms);
+    promise.then(
+      (v) => {
+        window.clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        window.clearTimeout(timer);
+        reject(e);
+      }
+    );
+  });
+}
+
 const TeamContext = React.createContext<TeamContextValue | null>(null);
 
 export function useTeam() {
@@ -52,34 +71,47 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(false);
 
+  const applyCache = React.useCallback((): boolean => {
+    if (!session) return false;
+    const cached = loadCache(session.teamId);
+    if (!cached) return false;
+    setTeam(cached.team);
+    setMembers(cached.members);
+    setBeverages(cached.beverages);
+    setConsumptions(cached.consumptions);
+    return true;
+  }, [session]);
+
   const load = React.useCallback(async () => {
     if (!session) return;
     try {
-      const [teamData, membersData, beveragesData] = await Promise.all([
-        getTeam(session.teamId),
-        getMembers(session.teamId),
-        getBeverages(session.teamId),
-      ]);
-      const consumptionsData = await getConsumptions(membersData.map((m) => m.id));
-      setTeam(teamData);
-      setMembers(membersData);
-      setBeverages(beveragesData);
-      setConsumptions(consumptionsData);
+      if (!navigator.onLine) throw new Error("offline");
+      const fresh = await withTimeout(
+        (async () => {
+          const [teamData, membersData, beveragesData] = await Promise.all([
+            getTeam(session.teamId),
+            getMembers(session.teamId),
+            getBeverages(session.teamId),
+          ]);
+          const consumptionsData = await getConsumptions(membersData.map((m) => m.id));
+          return { teamData, membersData, beveragesData, consumptionsData };
+        })(),
+        LOAD_TIMEOUT_MS
+      );
+      setTeam(fresh.teamData);
+      setMembers(fresh.membersData);
+      setBeverages(fresh.beveragesData);
+      setConsumptions(fresh.consumptionsData);
       setIsOffline(false);
       saveCache(session.teamId, {
-        team: teamData,
-        members: membersData,
-        beverages: beveragesData,
-        consumptions: consumptionsData,
+        team: fresh.teamData,
+        members: fresh.membersData,
+        beverages: fresh.beveragesData,
+        consumptions: fresh.consumptionsData,
       });
     } catch (e) {
-      console.error(e);
-      const cached = loadCache(session.teamId);
-      if (cached) {
-        setTeam(cached.team);
-        setMembers(cached.members);
-        setBeverages(cached.beverages);
-        setConsumptions(cached.consumptions);
+      console.warn("Laden fehlgeschlagen, nutze Offline-Cache", e);
+      if (applyCache()) {
         setIsOffline(true);
       } else {
         setError(true);
@@ -88,7 +120,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
       setPendingQueue(getQueue(session.teamId));
       setLoading(false);
     }
-  }, [session]);
+  }, [session, applyCache]);
 
   const syncQueue = React.useCallback(async () => {
     if (!session) return;
@@ -97,6 +129,7 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
     for (const item of queue) {
       try {
         await addConsumption({
+          id: item.id,
           memberId: item.memberId,
           beverageId: item.beverageId,
           quantity: item.quantity,
@@ -115,9 +148,11 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
       router.replace("/onboarding");
       return;
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch on mount
+    // Stand aus dem Cache sofort zeigen, Netzwerk aktualisiert im Hintergrund.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial hydration from cache
+    if (applyCache()) setLoading(false);
     load().then(() => syncQueue());
-  }, [session, router, load, syncQueue]);
+  }, [session, router, load, syncQueue, applyCache]);
 
   React.useEffect(() => {
     window.addEventListener("online", syncQueue);
@@ -127,19 +162,31 @@ export function TeamProvider({ children }: { children: React.ReactNode }) {
   const bookConsumption = React.useCallback(
     async (params: { memberId: string; beverageId: string; quantity: number }) => {
       if (!session) return;
-      try {
-        await addConsumption(params);
-        await load();
-      } catch (e) {
-        console.error(e);
-        const item: QueuedConsumption = {
+      const id = crypto.randomUUID();
+      const enqueue = () => {
+        enqueueConsumption(session.teamId, {
+          id,
           localId: makeLocalId(),
           ...params,
           timestamp: new Date().toISOString(),
-        };
-        enqueueConsumption(session.teamId, item);
+        });
         setPendingQueue(getQueue(session.teamId));
         setIsOffline(true);
+      };
+      if (!navigator.onLine) {
+        enqueue();
+        return;
+      }
+      const controller = new AbortController();
+      const timer = window.setTimeout(() => controller.abort(), BOOKING_TIMEOUT_MS);
+      try {
+        await addConsumption({ id, ...params, signal: controller.signal });
+        await load();
+      } catch (e) {
+        console.warn("Buchung offline eingereiht", e);
+        enqueue();
+      } finally {
+        window.clearTimeout(timer);
       }
     },
     [session, load]
